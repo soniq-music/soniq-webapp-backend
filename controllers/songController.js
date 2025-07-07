@@ -3,48 +3,51 @@ const fetch = require('node-fetch');
 const streamifier = require('streamifier');
 const { cloudinary } = require('../config/cloudinary');
 const Song = require('../models/Song');
-const generateAIImage = require('../utils/generateAIImage'); // AI image generator
+const generateAIImage = require('../utils/generateAIImage');
 
-// Helper: Get duration from a Cloudinary URL
 async function getAudioDurationFromURL(url) {
     try {
         const response = await fetch(url);
         const stream = response.body;
         const metadata = await mm.parseStream(stream, null, { duration: true });
-        return metadata.format.duration; // seconds
+        return metadata.format.duration;
     } catch (err) {
-        console.error('Failed to calculate duration:', err.message);
+        console.error('❌ Failed to calculate duration:', err.message);
         return null;
     }
 }
 
-// POST /api/songs/upload
 exports.uploadSong = async (req, res) => {
     try {
+        // ✅ Debug: Ensure req.body is parsed
+        console.log('📥 req.body:', req.body);
+        console.log('📁 req.files:', req.files);
+
         const { title, artist, mood, genre, album, duration } = req.body;
-        const files = req.files;
         const uploaderId = req.user?.id;
 
-        const audioFile = files?.audio?.[0];
-        const imageFile = files?.image?.[0];
+        const audioFile = req.files?.audio?.[0];
+        const imageFile = req.files?.image?.[0];
 
-        if (!audioFile) return res.status(400).json({ error: 'No audio file uploaded' });
+        console.log('🎵 audioFile:', audioFile?.originalname || 'None');
+        console.log('🖼️ imageFile:', imageFile?.originalname || 'None');
 
-        // Auto-calculate duration if not provided
+        if (!audioFile) {
+            return res.status(400).json({ error: 'No audio file uploaded' });
+        }
+
+        // ⏱️ Get duration if not provided
         let finalDuration = duration;
-        if (!duration) {
+        if (!duration && audioFile.path) {
             finalDuration = await getAudioDurationFromURL(audioFile.path);
         }
 
-        // Handle image
+        // 📸 Upload or generate cover image
         let coverImageUrl;
-        if (imageFile) {
-            coverImageUrl = imageFile.path; // Already on Cloudinary
+        if (imageFile?.path) {
+            coverImageUrl = imageFile.path;
         } else {
-            // Generate AI image buffer
             const aiImageBuffer = await generateAIImage(`${title} ${artist} ${album}`);
-
-            // Upload buffer to Cloudinary
             coverImageUrl = await new Promise((resolve, reject) => {
                 const uploadStream = cloudinary.uploader.upload_stream(
                     {
@@ -60,7 +63,7 @@ exports.uploadSong = async (req, res) => {
             });
         }
 
-        // Save song metadata in DB
+        // 💾 Save to DB
         const song = await Song.create({
             title,
             artist,
@@ -73,12 +76,11 @@ exports.uploadSong = async (req, res) => {
             artistId: uploaderId,
         });
 
-        res.status(201).json({
-            message: 'Song uploaded successfully',
-            song,
-        });
+        console.log('✅ Song uploaded:', song.title);
+        return res.status(201).json({ message: 'Song uploaded successfully', song });
+
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Upload failed' });
+        console.error('❌ Error uploading song:', err);
+        return res.status(500).json({ error: 'Upload failed', details: err.message });
     }
 };

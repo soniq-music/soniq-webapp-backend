@@ -36,8 +36,23 @@ exports.registerUser = async (req, res) => {
             avatarUrl,
         });
 
-        res.status(201).json({
-            message: 'User registered successfully',
+        // 🔐 Generate tokens
+        const accessToken = generateAccessToken(user);
+        const refreshToken = generateRefreshToken(user);
+
+        // 🍪 Set refresh token in HTTP-only cookie
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+
+        // 🎯 Send back access token + user info
+        res.status(200).json({
+            message: 'Login successful',
+            jwtAccessToken: accessToken,
+            refreshToken: refreshToken, // ⬅️ Include refresh token here
             user: {
                 uuid: user.uuid,
                 name: user.name,
@@ -46,15 +61,19 @@ exports.registerUser = async (req, res) => {
                 role: user.role,
             },
         });
+
     } catch (err) {
+        console.error('Register Error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 };
+
 
 // POST /api/auth/login
 exports.loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
+        console.log('Request body:', req.body);
         const user = await User.findOne({ where: { email } });
         if (!user) return res.status(400).json({ error: 'Invalid email or password' });
 
@@ -73,16 +92,22 @@ exports.loginUser = async (req, res) => {
 
         res.status(200).json({
             message: 'Login successful',
-            token: accessToken,
+            jwtAccessToken: accessToken,
+            refreshToken: refreshToken,
             user: {
+                id: user.id,
                 uuid: user.uuid,
                 name: user.name,
                 email: user.email,
                 avatarUrl: user.avatarUrl,
                 role: user.role,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+
             },
         });
     } catch (err) {
+        console.error('Login error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 };
@@ -92,12 +117,14 @@ exports.getMe = async (req, res) => {
     try {
         const user = req.user;
         res.status(200).json({
+            id: user.id,
             uuid: user.uuid,
             name: user.name,
             email: user.email,
             avatarUrl: user.avatarUrl,
             role: user.role,
             createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
         });
     } catch {
         res.status(500).json({ error: 'Failed to fetch user info' });
@@ -107,16 +134,40 @@ exports.getMe = async (req, res) => {
 // POST /api/auth/refresh
 exports.refreshToken = (req, res) => {
     const token = req.cookies.refreshToken;
-    if (!token) return res.status(401).json({ error: 'No refresh token' });
+    if (!token) {
+        return res.status(401).json({ error: 'No refresh token provided' });
+    }
 
     try {
         const decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
-        const accessToken = jwt.sign({ uuid: decoded.uuid }, process.env.ACCESS_TOKEN_SECRET, {
-            expiresIn: '15m',
+
+        // 🔐 Generate new tokens
+        const newAccessToken = jwt.sign(
+            { uuid: decoded.uuid },
+            process.env.ACCESS_TOKEN_SECRET,
+            { expiresIn: '15m' }
+        );
+
+        const newRefreshToken = jwt.sign(
+            { uuid: decoded.uuid },
+            process.env.REFRESH_TOKEN_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        // 🍪 Set new refresh token in cookie
+        res.cookie('refreshToken', newRefreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
-        res.json({ token: accessToken });
+
+        // 🎯 Send new access token in response
+        res.status(200).json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
+
     } catch (err) {
-        res.status(403).json({ error: 'Invalid refresh token' });
+        console.error('Refresh token error:', err);
+        res.status(403).json({ error: 'Invalid or expired refresh token' });
     }
 };
 
@@ -126,6 +177,7 @@ exports.logoutUser = (req, res) => {
     res.json({ message: 'Logged out successfully' });
 };
 
+// POST /api/auth/forgot-password
 exports.forgotPassword = async (req, res) => {
     const { email } = req.body;
 
@@ -153,16 +205,16 @@ exports.forgotPassword = async (req, res) => {
 
         // Email content
         const message = `
-You (or someone else) requested a password reset for your VibeMind account.
+You (or someone else) requested a password reset for your SoniQ account.
 
 Please click the link below to reset your password. This link will expire in 15 minutes:
 
 ${resetUrl}
 
 If you did not request this, please ignore this email.
-    `.trim();
+        `.trim();
 
-        await sendEmail(user.email, 'Reset Your VibeMind Password', message);
+        await sendEmail(user.email, 'Reset Your SoniQ Password', message);
 
         // Optional: log reset URL during development
         if (process.env.NODE_ENV !== 'production') {
@@ -176,8 +228,7 @@ If you did not request this, please ignore this email.
     }
 };
 
-
-
+// POST /api/auth/reset-password
 exports.resetPassword = async (req, res) => {
     const { token, newPassword } = req.body;
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
