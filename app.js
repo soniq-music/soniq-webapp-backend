@@ -1,31 +1,32 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const cookieParser = require('cookie-parser'); // ✅ Added
+const cookieParser = require('cookie-parser');
 
-// Load .env variables
 dotenv.config();
 
-// Create app
 const app = express();
 
-// Middleware
+// Enable CORS with cookies
 app.use(cors({
-    origin: true, // or specify origin if needed
-    credentials: true // ✅ Allow cookies to be sent
+    origin: true,
+    credentials: true
 }));
-app.use(express.json());
-app.use(cookieParser()); // ✅ Added here
+
+// ✅ Only parse real JSON requests (skip multipart/form-data)
+app.use(express.json({ type: 'application/json' }));
+app.use(express.urlencoded({ extended: true, type: 'application/x-www-form-urlencoded' }));
+
+
+app.use(cookieParser());
 
 // Routes
 const authRoutes = require('./routes/authRoutes');
 const songRoutes = require('./routes/songRoutes');
 
-// Register routes
 app.use('/api/auth', authRoutes);
 app.use('/api/songs', songRoutes);
 
-// Root route (optional)
 app.get('/', (req, res) => {
     res.send('VibeMind Music API is running');
 });
