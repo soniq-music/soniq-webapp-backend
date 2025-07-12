@@ -7,25 +7,47 @@ const User = sequelize.define('User', {
         autoIncrement: true,
         primaryKey: true,
     },
-    uuid: {
-        type: DataTypes.UUID,
+    uid: {
+        type: DataTypes.CHAR(36), // ✅ Fix this
         defaultValue: DataTypes.UUIDV4,
-        unique: true,
+        allowNull: false,
+        unique: true
     },
-    name: { type: DataTypes.STRING, allowNull: false },
+    name: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+    },
     email: {
-        type: DataTypes.STRING,
+        type: DataTypes.STRING(255),
         unique: true,
         allowNull: false,
         validate: { isEmail: true },
     },
-    password: { type: DataTypes.STRING, allowNull: false },
-    avatarUrl: { type: DataTypes.STRING },
-    role: { type: DataTypes.STRING, defaultValue: 'user' },
-    passwordResetToken: { type: DataTypes.STRING },
-    passwordResetExpires: { type: DataTypes.DATE },
+    password: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+    },
+    avatarUrl: {
+        type: DataTypes.TEXT,
+    },
+    role: {
+        type: DataTypes.ENUM('user', 'artist', 'admin'),
+        allowNull: false,
+        defaultValue: 'user',
+    },
+    passwordResetToken: {
+        type: DataTypes.STRING(255),
+    },
+    passwordResetExpires: {
+        type: DataTypes.DATE,
+    },
 }, {
+    tableName: 'users',
     timestamps: true,
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+    underscored: false,
+    freezeTableName: true,
 });
 
 module.exports = User;

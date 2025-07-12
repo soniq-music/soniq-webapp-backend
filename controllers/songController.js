@@ -1,12 +1,11 @@
 const mm = require('music-metadata');
 const streamifier = require('streamifier');
 const { cloudinary } = require('../config/cloudinary');
-const Song = require('../models/Song');
+const { Song, Artist, Genre, Mood } = require('../models');
 const generateAIImage = require('../utils/generateAIImage');
 const { Op } = require('sequelize');
 
-
-
+// Utility to get audio duration from buffer
 async function getAudioDurationFromBuffer(buffer) {
     try {
         const metadata = await mm.parseBuffer(buffer, 'audio/mpeg', { duration: true });
@@ -19,12 +18,13 @@ async function getAudioDurationFromBuffer(buffer) {
 
 // POST /api/songs/upload
 exports.uploadSong = async (req, res) => {
-    try {
-        console.log('📥 req.body:', req.body);
-        console.log('📁 req.files:', req.files);
+    console.log('FILES:', req.files);
+    console.log('BODY:', req.body);
 
-        const { title, artist, mood, genre, album, duration } = req.body;
-        const uploaderId = req.user?.id;
+    try {
+        const { title, album, duration } = req.body;
+        let { artist, genre, mood } = req.body;
+        const uploaderUid = req.user?.uid;
 
         const audioFile = req.files?.audio?.[0];
         const imageFile = req.files?.image?.[0];
@@ -33,30 +33,30 @@ exports.uploadSong = async (req, res) => {
             return res.status(400).json({ error: 'No audio file uploaded' });
         }
 
-        // 📤 Upload audio buffer to Cloudinary
+        // Normalize to arrays
+        artist = typeof artist === 'string' ? artist.split(',').map(a => a.trim()) : artist || [];
+        genre = typeof genre === 'string' ? genre.split(',').map(g => g.trim()) : genre || [];
+        mood = typeof mood === 'string' ? mood.split(',').map(m => m.trim()) : mood || [];
+
+        // Upload audio
         const audioUploadUrl = await new Promise((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream(
                 {
-                    resource_type: 'video', // required for audio
+                    resource_type: 'video',
                     folder: 'songs',
-                    timeout: 120000 // 2-minute timeout
+                    timeout: 120000
                 },
-                (error, result) => {
-                    if (error) return reject(error);
-                    resolve(result.secure_url);
-                }
+                (error, result) => error ? reject(error) : resolve(result.secure_url)
             );
             streamifier.createReadStream(audioFile.buffer).pipe(uploadStream);
         });
 
-        // ⏱️ Get duration if not provided
         let finalDuration = duration;
         if (!duration) {
-            // finalDuration = await getAudioDurationFromURL(audioUploadUrl);
             finalDuration = await getAudioDurationFromBuffer(audioFile.buffer);
         }
 
-        // 📸 Upload or generate cover image
+        // Upload image
         let coverImageUrl;
         if (imageFile) {
             coverImageUrl = await new Promise((resolve, reject) => {
@@ -66,15 +66,12 @@ exports.uploadSong = async (req, res) => {
                         folder: 'covers',
                         timeout: 120000
                     },
-                    (error, result) => {
-                        if (error) return reject(error);
-                        resolve(result.secure_url);
-                    }
+                    (error, result) => error ? reject(error) : resolve(result.secure_url)
                 );
                 streamifier.createReadStream(imageFile.buffer).pipe(uploadStream);
             });
         } else {
-            const aiImageBuffer = await generateAIImage(`${title} ${artist} ${album}`);
+            const aiImageBuffer = await generateAIImage(`${title} ${artist.join(' ')} ${album}`);
             coverImageUrl = await new Promise((resolve, reject) => {
                 const uploadStream = cloudinary.uploader.upload_stream(
                     {
@@ -82,33 +79,48 @@ exports.uploadSong = async (req, res) => {
                         folder: 'covers',
                         timeout: 120000
                     },
-                    (error, result) => {
-                        if (error) return reject(error);
-                        resolve(result.secure_url);
-                    }
+                    (error, result) => error ? reject(error) : resolve(result.secure_url)
                 );
                 streamifier.createReadStream(aiImageBuffer).pipe(uploadStream);
             });
         }
 
-        // 💾 Save to DB
         const song = await Song.create({
             title,
-            artist,
             url: audioUploadUrl,
-            mood,
-            genre,
-            album,
             duration: finalDuration,
+            album,
             coverImage: coverImageUrl,
-            artistId: uploaderId,
+            artistUid: uploaderUid,
         });
 
-        console.log('✅ Song uploaded:', song.title);
-        return res.status(201).json({ message: 'Song uploaded successfully', song });
+        for (const name of artist) {
+            const [artistInstance] = await Artist.findOrCreate({ where: { name } });
+            await song.addArtist(artistInstance);
+        }
+
+        for (const name of genre) {
+            const [genreInstance] = await Genre.findOrCreate({ where: { name } });
+            await song.addGenre(genreInstance);
+        }
+
+        for (const name of mood) {
+            const [moodInstance] = await Mood.findOrCreate({ where: { name } });
+            await song.addMood(moodInstance);
+        }
+
+        const fullSong = await Song.findByPk(song.id, {
+            include: [
+                { model: Artist, as: 'Artists' },
+                { model: Genre, as: 'Genres' },
+                { model: Mood, as: 'Moods' },
+            ]
+        });
+
+        return res.status(201).json({ message: 'Song uploaded successfully', song: fullSong });
 
     } catch (err) {
-        console.error('❌ Error uploading song:', err);
+        console.error('Error uploading song:', err);
         return res.status(500).json({ error: 'Upload failed', details: err.message });
     }
 };
@@ -116,90 +128,47 @@ exports.uploadSong = async (req, res) => {
 // GET /api/songs
 exports.getAllSongs = async (req, res) => {
     try {
-        const { search, genre, mood, limit = 20, offset = 0 } = req.query;
-
-        const where = {};
-
-        if (genre) where.genre = genre;
-        if (mood) where.mood = mood;
-        if (search) {
-            where[Op.or] = [
-                { title: { [Op.like]: `%${search}%` } },
-                { artist: { [Op.like]: `%${search}%` } }
-            ];
-        }
-
         const songs = await Song.findAll({
-            where,
-            limit: parseInt(limit),
-            offset: parseInt(offset),
+            include: [
+                { model: Artist, as: 'Artists' },
+                { model: Genre, as: 'Genres' },
+                { model: Mood, as: 'Moods' },
+            ],
             order: [['createdAt', 'DESC']],
         });
-
-        return res.json({ songs });
-
+        res.status(200).json({ songs });
     } catch (err) {
-        console.error('Error fetching songs:', err);
-        return res.status(500).json({ error: 'Failed to fetch songs' });
+        console.error('Failed to fetch all songs:', err);
+        res.status(500).json({ error: 'Failed to retrieve songs', details: err.message });
     }
 };
 
-// GET /api/songs/:uuid
-exports.getSongByUuid = async (req, res) => {
+// GET /api/songs/:uid
+exports.getSongByUid = async (req, res) => {
     try {
-        const { uuid } = req.params;
+        const { uid } = req.params;
+        const song = await Song.findOne({ where: { uid } });
 
-        const song = await Song.findOne({ where: { uuid } });
+        if (!song) return res.status(404).json({ error: 'Song not found' });
 
-        if (!song) {
-            return res.status(404).json({ error: 'Song not found' });
-        }
-
-        return res.json({ song });
+        res.status(200).json({ song });
     } catch (err) {
         console.error('Error fetching song:', err);
-        return res.status(500).json({ error: 'Failed to fetch song' });
+        res.status(500).json({ error: 'Failed to fetch song' });
     }
 };
 
 // GET /api/songs/my-songs
-// Fetch songs uploaded by the authenticated artist
 exports.getMySongs = async (req, res) => {
     try {
-        const artistId = req.user?.id;
+        const artistUid = req.user?.uid;
         const songs = await Song.findAll({
-            where: { artistId },
+            where: { artistUid },
             order: [['createdAt', 'DESC']]
         });
         res.status(200).json({ songs });
     } catch (err) {
-        console.error('❌ Failed to fetch artist songs:', err);
-        res.status(500).json({ error: 'Failed to retrieve songs', details: err.message });
-    }
-};
-
-// GET /api/songs/my-songs
-exports.getAllSongs = async (req, res) => {
-    try {
-        const songs = await Song.findAll({
-            order: [['createdAt', 'DESC']]
-        });
-        res.status(200).json({ songs });
-    } catch (err) {
-        console.error('❌ Failed to fetch all songs:', err);
-        res.status(500).json({ error: 'Failed to retrieve songs', details: err.message });
-    }
-};
-
-// GET /api/songs/admin/all-songs
-exports.getAllSongs = async (req, res) => {
-    try {
-        const songs = await Song.findAll({
-            order: [['createdAt', 'DESC']]
-        });
-        res.status(200).json({ songs });
-    } catch (err) {
-        console.error('❌ Failed to fetch all songs:', err);
+        console.error('Failed to fetch artist songs:', err);
         res.status(500).json({ error: 'Failed to retrieve songs', details: err.message });
     }
 };
@@ -208,14 +177,13 @@ exports.getAllSongs = async (req, res) => {
 exports.updateSong = async (req, res) => {
     try {
         const songId = req.params.id;
-        const userId = req.user.id;
+        const userUid = req.user.uid;
         const userRole = req.user.role;
 
         const song = await Song.findByPk(songId);
         if (!song) return res.status(404).json({ error: 'Song not found' });
 
-        // Ownership check (unless admin)
-        if (userRole !== 'admin' && song.artistId !== userId) {
+        if (userRole !== 'admin' && song.artistUid !== userUid) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -223,7 +191,6 @@ exports.updateSong = async (req, res) => {
         const audioFile = req.files?.audio?.[0];
         const imageFile = req.files?.image?.[0];
 
-        // Upload new audio if provided
         if (audioFile) {
             const audioUrl = await new Promise((resolve, reject) => {
                 const uploadStream = cloudinary.uploader.upload_stream(
@@ -233,13 +200,10 @@ exports.updateSong = async (req, res) => {
                 streamifier.createReadStream(audioFile.buffer).pipe(uploadStream);
             });
             song.url = audioUrl;
-
-            // Optional: update duration from buffer if not passed
             const newDuration = await getAudioDurationFromBuffer(audioFile.buffer);
             if (newDuration) song.duration = newDuration;
         }
 
-        // Upload new image if provided
         if (imageFile) {
             const imageUrl = await new Promise((resolve, reject) => {
                 const uploadStream = cloudinary.uploader.upload_stream(
@@ -251,23 +215,16 @@ exports.updateSong = async (req, res) => {
             song.coverImage = imageUrl;
         }
 
-        // Update text fields
         if (title) song.title = title;
         if (album) song.album = album;
-        if (genre) song.genre = genre;
-        if (mood) song.mood = mood;
         if (duration) song.duration = duration;
 
         await song.save();
 
-        return res.status(200).json({ message: 'Song updated', song });
+        res.status(200).json({ message: 'Song updated', song });
 
     } catch (err) {
-        console.error('❌ Error updating song:', err);
-        return res.status(500).json({ error: 'Update failed', details: err.message });
+        console.error('Error updating song:', err);
+        res.status(500).json({ error: 'Update failed', details: err.message });
     }
 };
-
-
-
-

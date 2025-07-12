@@ -12,11 +12,10 @@ exports.authenticate = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     try {
-        // const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
-        // Find user from token's uuid
-        const user = await User.findOne({ where: { uuid: decoded.uuid } });
+        // Find user from token's uid
+        const user = await User.findOne({ where: { uid: decoded.uid } });
         if (!user) return res.status(401).json({ error: 'Invalid token' });
 
         // Attach user to request
@@ -43,4 +42,3 @@ exports.authorizeAdminOnly = (req, res, next) => {
     }
     next();
 };
-

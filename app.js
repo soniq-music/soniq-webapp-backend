@@ -13,7 +13,7 @@ app.use(cors({
     credentials: true
 }));
 
-// ✅ Only parse real JSON requests (skip multipart/form-data)
+// Only parse real JSON requests (skip multipart/form-data)
 app.use(express.json({ type: 'application/json' }));
 app.use(express.urlencoded({ extended: true, type: 'application/x-www-form-urlencoded' }));
 
@@ -28,7 +28,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/songs', songRoutes);
 
 app.get('/', (req, res) => {
-    res.send('VibeMind Music API is running');
+    res.send('SoniQ Music API is running');
 });
 
 

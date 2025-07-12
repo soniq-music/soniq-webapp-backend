@@ -5,16 +5,15 @@ const crypto = require('crypto');
 const { Op } = require('sequelize');
 const sendEmail = require('../utils/sendEmail'); // utility to send email
 
-
 // Generate Tokens
 const generateAccessToken = (user) => {
-    return jwt.sign({ uuid: user.uuid, role: user.role }, process.env.ACCESS_TOKEN_SECRET, {
+    return jwt.sign({ uid: user.uid, role: user.role }, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: '15m',
     });
 };
 
 const generateRefreshToken = (user) => {
-    return jwt.sign({ uuid: user.uuid }, process.env.REFRESH_TOKEN_SECRET, {
+    return jwt.sign({ uid: user.uid }, process.env.REFRESH_TOKEN_SECRET, {
         expiresIn: '7d',
     });
 };
@@ -36,11 +35,18 @@ exports.registerUser = async (req, res) => {
             avatarUrl,
         });
 
-        // 🔐 Generate tokens
+        // Send welcome email
+        await sendEmail(
+            user.email,
+            'Welcome to SoniQ 🎧',
+            `Hi ${user.name},\n\nThanks for registering on SoniQ! Your account has been created successfully.\n\nEnjoy the music,\nThe SoniQ Team`
+        );
+
+        // Generate tokens
         const accessToken = generateAccessToken(user);
         const refreshToken = generateRefreshToken(user);
 
-        // 🍪 Set refresh token in HTTP-only cookie
+        // Set refresh token in HTTP-only cookie
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: true,
@@ -48,13 +54,13 @@ exports.registerUser = async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
 
-        // 🎯 Send back access token + user info
+        // Send back access token + user info
         res.status(200).json({
-            message: 'Login successful',
+            message: 'Registration successful',
             jwtAccessToken: accessToken,
-            refreshToken: refreshToken, // ⬅️ Include refresh token here
+            refreshToken: refreshToken,
             user: {
-                uuid: user.uuid,
+                uid: user.uid,
                 name: user.name,
                 email: user.email,
                 avatarUrl: user.avatarUrl,
@@ -68,7 +74,6 @@ exports.registerUser = async (req, res) => {
     }
 };
 
-
 // POST /api/auth/login
 exports.loginUser = async (req, res) => {
     try {
@@ -80,7 +85,7 @@ exports.loginUser = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ error: 'Invalid email or password' });
 
-        const accessToken = generateAccessToken(user);
+        const jwtAccessToken = generateAccessToken(user);
         const refreshToken = generateRefreshToken(user);
 
         res.cookie('refreshToken', refreshToken, {
@@ -90,22 +95,22 @@ exports.loginUser = async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
 
-        res.status(200).json({
+        res.json({
             message: 'Login successful',
-            jwtAccessToken: accessToken,
-            refreshToken: refreshToken,
+            jwtAccessToken,
+            refreshToken,
             user: {
                 id: user.id,
-                uuid: user.uuid,
+                uid: user.uid, // ✅ Add this
                 name: user.name,
                 email: user.email,
                 avatarUrl: user.avatarUrl,
                 role: user.role,
                 createdAt: user.createdAt,
-                updatedAt: user.updatedAt,
-
-            },
+                updatedAt: user.updatedAt
+            }
         });
+
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ error: 'Server error' });
@@ -118,7 +123,7 @@ exports.getMe = async (req, res) => {
         const user = req.user;
         res.status(200).json({
             id: user.id,
-            uuid: user.uuid,
+            uid: user.uid,
             name: user.name,
             email: user.email,
             avatarUrl: user.avatarUrl,
@@ -143,13 +148,13 @@ exports.refreshToken = (req, res) => {
 
         // 🔐 Generate new tokens
         const newAccessToken = jwt.sign(
-            { uuid: decoded.uuid },
+            { uid: decoded.uid },
             process.env.ACCESS_TOKEN_SECRET,
             { expiresIn: '15m' }
         );
 
         const newRefreshToken = jwt.sign(
-            { uuid: decoded.uuid },
+            { uid: decoded.uid },
             process.env.REFRESH_TOKEN_SECRET,
             { expiresIn: '7d' }
         );
@@ -254,4 +259,3 @@ exports.resetPassword = async (req, res) => {
         res.status(500).json({ error: 'Server error' });
     }
 };
-
