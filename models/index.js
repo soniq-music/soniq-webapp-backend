@@ -1,40 +1,41 @@
 const Sequelize = require('sequelize');
 const sequelize = require('../config/db');
 
-// Models
+// Import models
 const Song = require('./Song');
 const User = require('./User');
 const Artist = require('./Artist');
 const Genre = require('./Genre');
 const Mood = require('./Mood');
 
+// ===========================
 // Associations
+// ===========================
+
+// Song ↔ User (Uploader)
 Song.belongsTo(User, {
     foreignKey: 'artistUid',
-    targetKey: 'uid',  // ✅ Use the correct model field name
+    targetKey: 'uid',
     as: 'uploader',
 });
-
-// User can have many songs
 User.hasMany(Song, {
     foreignKey: 'artistUid',
-    sourceKey: 'uid',  // ✅ Also correct here
+    sourceKey: 'uid',
     as: 'songs',
 });
-
 
 // Many-to-Many: Song ↔ Artist
 Song.belongsToMany(Artist, {
     through: 'song_artists',
     foreignKey: 'songId',
     otherKey: 'artistId',
-    as: 'Artists'
+    as: 'Artists',
 });
 Artist.belongsToMany(Song, {
     through: 'song_artists',
     foreignKey: 'artistId',
     otherKey: 'songId',
-    as: 'Songs'
+    as: 'Songs',
 });
 
 // Many-to-Many: Song ↔ Genre
@@ -42,13 +43,13 @@ Song.belongsToMany(Genre, {
     through: 'song_genres',
     foreignKey: 'songId',
     otherKey: 'genreId',
-    as: 'Genres'
+    as: 'Genres',
 });
 Genre.belongsToMany(Song, {
     through: 'song_genres',
     foreignKey: 'genreId',
     otherKey: 'songId',
-    as: 'Songs'
+    as: 'Songs',
 });
 
 // Many-to-Many: Song ↔ Mood
@@ -56,15 +57,18 @@ Song.belongsToMany(Mood, {
     through: 'song_moods',
     foreignKey: 'songId',
     otherKey: 'moodId',
-    as: 'Moods'
+    as: 'Moods',
 });
 Mood.belongsToMany(Song, {
     through: 'song_moods',
     foreignKey: 'moodId',
     otherKey: 'songId',
-    as: 'Songs'
+    as: 'Songs',
 });
 
+// ===========================
+// Export all models + sequelize instance
+// ===========================
 module.exports = {
     sequelize,
     Sequelize,
@@ -72,5 +76,5 @@ module.exports = {
     User,
     Artist,
     Genre,
-    Mood
+    Mood,
 };

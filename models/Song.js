@@ -30,8 +30,20 @@ const Song = sequelize.define('Song', {
     coverImage: {
         type: DataTypes.TEXT,
     },
+    year: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+    },
+    language: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+    },
+    parentUid: {
+        type: DataTypes.UUID,
+        allowNull: true,
+    },
     artistUid: {
-        type: DataTypes.CHAR(36), // ✅ Now matches
+        type: DataTypes.CHAR(36),
         references: {
             model: 'users',
             key: 'uid'

@@ -8,22 +8,9 @@ const {
 } = require('../middleware/authMiddleware');
 
 const router = express.Router();
-
-// Use in-memory storage for Cloudinary streaming
-const upload = multer();
+const upload = multer(); // In-memory for Cloudinary
 
 // Upload a new song
-// router.post(
-//     '/upload',
-//     authenticate,
-//     authorizeArtistOrAdmin,
-//     upload.fields([
-//         { name: 'audio', maxCount: 1 },
-//         { name: 'image', maxCount: 1 }
-//     ]),
-//     uploadController.uploadSong
-// );
-
 router.post(
     '/upload',
     authenticate,
@@ -43,16 +30,10 @@ router.post(
     uploadController.uploadSong
 );
 
+// Filtered + paginated list (also works as "get all")
+router.get('/', uploadController.getAllSongsFiltered);
 
-// Get all songs (admin only)
-router.get(
-    '/admin/all-songs',
-    authenticate,
-    authorizeAdminOnly,
-    uploadController.getAllSongs
-);
-
-// Get songs uploaded by the logged-in user
+// Get songs uploaded by the current user
 router.get(
     '/my-songs',
     authenticate,
@@ -60,17 +41,19 @@ router.get(
     uploadController.getMySongs
 );
 
-// Get all public songs
-router.get('/', uploadController.getAllSongs);
+router.get('/album/:albumName', uploadController.getSongsByAlbum);
 
-// Get a specific song by UUID
-// router.get('/:uuid', uploadController.getSongByUuid);
-router.get('/:uid', uploadController.getSongByUid);
+// Get song by UID
+router.get('/song/:uid', uploadController.getSongByUid);
 
+// Filter by artist, genre, mood (all by name)
+router.get('/artist/:name', uploadController.getSongsByArtist);
+router.get('/genre/:name', uploadController.getSongsByGenre);
+router.get('/mood/:name', uploadController.getSongsByMood);
 
-// Update a song
+// Update song by UID
 router.put(
-    '/:id',
+    '/:uid',
     authenticate,
     authorizeArtistOrAdmin,
     upload.fields([
@@ -79,5 +62,13 @@ router.put(
     ]),
     uploadController.updateSong
 );
+
+router.delete(
+    '/:uid',
+    authenticate,
+    authorizeArtistOrAdmin,
+    uploadController.deleteSong
+);
+
 
 module.exports = router;
