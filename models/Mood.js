@@ -18,22 +18,19 @@ const Mood = sequelize.define('Mood', {
         allowNull: false,
         unique: true,
     },
-    createdAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        allowNull: false,
-    },
-    updatedAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        allowNull: false,
-    },
 }, {
     tableName: 'moods',
     timestamps: true,
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
     freezeTableName: true,
+});
+
+// Normalize name to lowercase before validation
+Mood.beforeValidate((mood) => {
+    if (mood.name) {
+        mood.name = mood.name.trim().toLowerCase();
+    }
 });
 
 module.exports = Mood;

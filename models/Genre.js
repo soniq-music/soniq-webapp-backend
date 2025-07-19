@@ -18,22 +18,19 @@ const Genre = sequelize.define('Genre', {
         allowNull: false,
         unique: true,
     },
-    createdAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        allowNull: false,
-    },
-    updatedAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        allowNull: false,
-    },
 }, {
     tableName: 'genres',
     timestamps: true,
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
     freezeTableName: true,
+});
+
+// Optional: normalize genre name before saving
+Genre.beforeValidate((genre) => {
+    if (genre.name) {
+        genre.name = genre.name.trim().toLowerCase();
+    }
 });
 
 module.exports = Genre;

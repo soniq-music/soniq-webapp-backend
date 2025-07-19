@@ -18,22 +18,19 @@ const Artist = sequelize.define('Artist', {
         allowNull: false,
         unique: true,
     },
-    createdAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        allowNull: false,
-    },
-    updatedAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        allowNull: false,
-    },
 }, {
     tableName: 'artists',
     timestamps: true,
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
     freezeTableName: true,
+});
+
+// Optional: Normalize artist name before saving
+Artist.beforeValidate((artist) => {
+    if (artist.name) {
+        artist.name = artist.name.trim();
+    }
 });
 
 module.exports = Artist;

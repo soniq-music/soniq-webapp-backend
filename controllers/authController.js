@@ -21,7 +21,7 @@ const generateRefreshToken = (user) => {
 // POST /api/auth/register
 exports.registerUser = async (req, res) => {
     try {
-        const { name, email, password, avatarUrl } = req.body;
+        const { name, email, password, avatarUrl, deviceId, deviceOS } = req.body;
 
         const existingUser = await User.findOne({ where: { email } });
         if (existingUser) return res.status(400).json({ error: 'User already exists' });
@@ -33,7 +33,10 @@ exports.registerUser = async (req, res) => {
             email,
             password: hashedPassword,
             avatarUrl,
+            firstDeviceId: deviceId || null,
+            firstDeviceOS: deviceOS || null,
         });
+
 
         // Send welcome email
         await sendEmail(
@@ -117,7 +120,7 @@ exports.loginUser = async (req, res) => {
     }
 };
 
-// GET /api/auth/me
+// GET /api/auth/profile
 exports.getMe = async (req, res) => {
     try {
         const user = req.user;
@@ -146,7 +149,7 @@ exports.refreshToken = (req, res) => {
     try {
         const decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
 
-        // 🔐 Generate new tokens
+        // Generate new tokens
         const newAccessToken = jwt.sign(
             { uid: decoded.uid },
             process.env.ACCESS_TOKEN_SECRET,
@@ -159,7 +162,7 @@ exports.refreshToken = (req, res) => {
             { expiresIn: '7d' }
         );
 
-        // 🍪 Set new refresh token in cookie
+        // Set new refresh token in cookie
         res.cookie('refreshToken', newRefreshToken, {
             httpOnly: true,
             secure: true,
@@ -167,7 +170,7 @@ exports.refreshToken = (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
 
-        // 🎯 Send new access token in response
+        // Send new access token in response
         res.status(200).json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
 
     } catch (err) {
@@ -257,5 +260,171 @@ exports.resetPassword = async (req, res) => {
         res.json({ message: 'Password has been reset successfully' });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
+    }
+};
+
+
+
+
+// controllers/admin
+// GET /api/admin/users
+// Admin: Get all users (with optional filtering by role/email)
+exports.getAllUsers = async (req, res) => {
+    try {
+        const { role, email } = req.query;
+        const where = {};
+
+        if (role) where.role = role;
+        if (email) where.email = { [Op.like]: `%${email}%` };
+
+        const users = await User.findAll({
+            where,
+            order: [['createdAt', 'DESC']],
+            attributes: { exclude: ['password', 'passwordResetToken', 'passwordResetExpires'] },
+        });
+
+        res.status(200).json({ users });
+    } catch (err) {
+        console.error('Fetch users error:', err);
+        res.status(500).json({ error: 'Failed to fetch users' });
+    }
+};
+
+// PATCH /api/admin/users/:uid/ban
+// Admin: Ban a user by setting a "banned" flag
+exports.banUser = async (req, res) => {
+    try {
+        const { uid } = req.params;
+
+        const user = await User.findOne({ where: { uid } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        user.banned = true;
+        await user.save();
+
+        res.status(200).json({ message: `User ${user.email} has been banned.` });
+    } catch (err) {
+        console.error('Ban user error:', err);
+        res.status(500).json({ error: 'Failed to ban user' });
+    }
+};
+
+// PATCH /api/admin/users/:uid/unban
+// Admin: Unban a user
+exports.unbanUser = async (req, res) => {
+    try {
+        const { uid } = req.params;
+
+        const user = await User.findOne({ where: { uid } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        user.banned = false;
+        await user.save();
+
+        res.status(200).json({ message: `User ${user.email} has been unbanned.` });
+    } catch (err) {
+        console.error('Unban user error:', err);
+        res.status(500).json({ error: 'Failed to unban user' });
+    }
+};
+
+// DELETE /api/admin/users/:uid
+// Admin: Permanently delete a user
+exports.deleteUser = async (req, res) => {
+    try {
+        const { uid } = req.params;
+
+        const deletedCount = await User.destroy({ where: { uid } });
+        if (deletedCount === 0) {
+            return res.status(404).json({ error: 'User not found or already deleted' });
+        }
+
+        res.status(200).json({ message: 'User deleted successfully' });
+    } catch (err) {
+        console.error('Delete user error:', err);
+        res.status(500).json({ error: 'Failed to delete user' });
+    }
+};
+
+// PATCH /api/admin/users/:uid
+// Admin: Update user or artist profile fields
+// Admin can update self or other users
+exports.updateUser = async (req, res) => {
+    try {
+        const { uid } = req.params;
+
+        // Only allow self-edit or require admin role
+        if (req.user.uid !== uid && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        const updates = req.body; // e.g., name, avatarUrl, role, etc.
+        const user = await User.findOne({ where: { uid } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        await user.update(updates);
+
+        res.status(200).json({ message: 'User updated successfully', user });
+    } catch (err) {
+        console.error('Update user error:', err);
+        res.status(500).json({ error: 'Failed to update user' });
+    }
+};
+
+
+
+
+// PATCH /api/user/profile
+// User or artist: Update their own profile (not role)
+// Requires current password if changing email
+exports.updateProfile = async (req, res) => {
+    try {
+        const user = await User.findOne({ where: { uid: req.user.uid } });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const allowedFields = ['name', 'avatarUrl', 'email'];
+        const updates = {};
+
+        allowedFields.forEach(field => {
+            if (req.body[field] !== undefined) updates[field] = req.body[field];
+        });
+
+        // If email is being changed, require password verification
+        if (updates.email && updates.email !== user.email) {
+            const { currentPassword } = req.body;
+            if (!currentPassword) {
+                return res.status(400).json({ error: 'Current password is required to change email' });
+            }
+
+            const isMatch = await bcrypt.compare(currentPassword, user.password);
+            if (!isMatch) {
+                return res.status(401).json({ error: 'Incorrect current password' });
+            }
+        }
+
+        await user.update(updates);
+
+        res.status(200).json({ message: 'Profile updated', user });
+    } catch (err) {
+        console.error('Update profile error:', err);
+        res.status(500).json({ error: 'Failed to update profile' });
+    }
+};
+
+// DELETE /api/user/profile
+// User or artist: Delete their own account
+exports.deleteProfile = async (req, res) => {
+    try {
+        const deletedCount = await User.destroy({ where: { uid: req.user.uid } });
+
+        if (deletedCount === 0) {
+            return res.status(404).json({ error: 'User not found or already deleted' });
+        }
+
+        res.clearCookie('refreshToken');
+        res.status(200).json({ message: 'Your account has been deleted.' });
+    } catch (err) {
+        console.error('Delete profile error:', err);
+        res.status(500).json({ error: 'Failed to delete profile' });
     }
 };

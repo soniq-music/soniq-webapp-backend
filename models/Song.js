@@ -26,6 +26,9 @@ const Song = sequelize.define('Song', {
     },
     duration: {
         type: DataTypes.FLOAT,
+        validate: {
+            min: 0,
+        },
     },
     coverImage: {
         type: DataTypes.TEXT,
@@ -33,6 +36,10 @@ const Song = sequelize.define('Song', {
     year: {
         type: DataTypes.INTEGER,
         allowNull: true,
+        validate: {
+            min: 1900,
+            max: new Date().getFullYear(),
+        },
     },
     language: {
         type: DataTypes.STRING(50),
@@ -50,16 +57,6 @@ const Song = sequelize.define('Song', {
         },
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL'
-    },
-    createdAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        allowNull: false,
-    },
-    updatedAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        allowNull: false,
     },
 }, {
     tableName: 'songs',

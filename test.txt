@@ -1,0 +1,81 @@
+1. Upload song can be done by only Admin/Artist:
+End-point: {{backend_url}}api/songs/upload 
+Postman Body Tab → form-data
+
+| Key                   | Value               | Type                                      |
+| ---------             | --------------      | ----------------------------------------- |
+| title                 | Tum Tak             | Text                                      |
+| album                 | Raanjhanaa          | Text                                      |
+| artist                | A. R. Rahman        | Text (comma-separated if multiple)        |
+| genre                 | Romantic            | Text (comma-separated if multiple)        |
+| mood                  | Soothing            | Text (comma-separated if multiple)        |
+| musicDirector	        | A. R. Rahman	      | Text                                      |
+| year                  | 2013                | Number                                    |
+| language              | Hindi               | Text                                      |
+| parentUid             | (optional UID)      | Text                                      |
+| duration              | 210.5               | Number (optional if backend auto-detects) |
+| audio                 | song.mp3            | File                                      |
+| image                 | cover.jpg           | File (optional)                           |
+
+
+
+
+2. Upload multiple songs can be done by only Admin/Artist:
+End-point: {{backend_url}}api/songs/upload-multiple 
+Postman Body Tab → form-data
+
+Key          | Value         | Type
+-------------|---------------|-----
+songs        | [JSON array]  | Text
+audio0       | song1.mp3     | File
+image0       | cover1.jpg    | File
+audio1       | song2.mp3     | File
+image1       | cover2.jpg    | File
+
+songs format[JSON array]:
+[
+  {
+    "title": "My First Song",
+    "album": "Chill Vibes",
+    "artist": "Artist A",
+    "musicDirector": "Music Director B"
+    "genre": "Pop,Indie",
+    "mood": "Happy,Relaxed",
+    "language": "English",
+    "year": 2023
+  },
+  {
+    "title": "My Second Song",
+    "album": "Party Bangers",
+    "artist": "Artist B",
+    "musicDirector": "Music Director A"
+    "genre": "EDM",
+    "mood": "Energetic",
+    "language": "Hindi",
+    "year": 2022
+  }
+]
+
+
+[
+  {
+    "title": "Chikni Chameli",
+    "album": "Agneepath",
+    "artist": "Ajay Gogavale, Atul Gogavale,  Shreya Ghoshal",
+    "genre": "Bollywood, Pop, Folk",
+    "mood": "Dance, Energy, Item, Gym",
+    "musicDirector": "Ajay Gogavale, Atul Gogavale",
+    "year": 2011,
+    "language": "Hindi"
+  },
+  {
+    "title": "Finding Her",
+    "album": "Finding Her",
+    "artist": "Kushagra, Saaheal, Bharath",
+    "genre": "Bollywood, Pop",
+    "mood": "Love, Romantic",
+    "musicDirector": "Bharath",
+    "year": 2025,
+    "language": "Hindi",
+  }
+]

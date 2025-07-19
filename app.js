@@ -1,23 +1,17 @@
+// app.js
+
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const cookieParser = require('cookie-parser');
 
 dotenv.config();
-
 const app = express();
 
-// Enable CORS with cookies
-app.use(cors({
-    origin: true,
-    credentials: true
-}));
-
-// Only parse real JSON requests (skip multipart/form-data)
+// Middleware
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ type: 'application/json' }));
 app.use(express.urlencoded({ extended: true, type: 'application/x-www-form-urlencoded' }));
-
-
 app.use(cookieParser());
 
 // Routes
@@ -30,7 +24,5 @@ app.use('/api/songs', songRoutes);
 app.get('/', (req, res) => {
     res.send('SoniQ Music API is running');
 });
-
-
 
 module.exports = app;

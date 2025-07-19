@@ -8,7 +8,7 @@ const User = sequelize.define('User', {
         primaryKey: true,
     },
     uid: {
-        type: DataTypes.CHAR(36), // ✅ Fix this
+        type: DataTypes.CHAR(36),
         defaultValue: DataTypes.UUIDV4,
         allowNull: false,
         unique: true
@@ -40,6 +40,14 @@ const User = sequelize.define('User', {
     },
     passwordResetExpires: {
         type: DataTypes.DATE,
+    },
+    firstDeviceId: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+    },
+    firstDeviceOS: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
     },
 }, {
     tableName: 'users',
